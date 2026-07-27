@@ -6,13 +6,15 @@
 
 #include "task_manager.h"
 #include "net_task.h"
+#include "control_task.h"
+#include "sensor_task.h"
 #include <stdio.h>
 #include <string.h>
 #include "esp_log.h"
 
 static const char *TAG = "task_mgr";
 
-// 表驱动注册表：未来增加任何新 Task，只需在此处追加一行注册即可！
+// 表驱动注册表：统一包含 net 任务、control 红外控制任务与 sensor 温湿度采集任务
 static const task_item_t s_task_registry[] = {
     {
         .name = "net",
@@ -21,13 +23,27 @@ static const task_item_t s_task_registry[] = {
         .stop = net_task_stop,
         .is_running = net_task_is_running,
     },
+    {
+        .name = "control",
+        .description = "空调红外遥控数据发送与消息队列监听任务",
+        .start = control_task_start,
+        .stop = control_task_stop,
+        .is_running = control_task_is_running,
+    },
+    {
+        .name = "sensor",
+        .description = "AHT20 温湿度传感器定时采集任务",
+        .start = sensor_task_start,
+        .stop = sensor_task_stop,
+        .is_running = sensor_task_is_running,
+    },
 };
 
 #define TASK_REGISTRY_SIZE (sizeof(s_task_registry) / sizeof(s_task_registry[0]))
 
 esp_err_t task_manager_init(void)
 {
-    ESP_LOGI(TAG, "任务管理中间层初始化完成");
+    ESP_LOGI(TAG, "任务管理中间层初始化完成 (已注册 %d 个任务)", (int)TASK_REGISTRY_SIZE);
     return ESP_OK;
 }
 
@@ -51,7 +67,7 @@ esp_err_t task_manager_start(const char *name)
     if (item->start) {
         return item->start();
     }
-    return ESP_ERR_NOT_SUPPORTED;
+    return ESP_FAIL;
 }
 
 esp_err_t task_manager_stop(const char *name)
@@ -63,28 +79,35 @@ esp_err_t task_manager_stop(const char *name)
     if (item->stop) {
         return item->stop();
     }
-    return ESP_ERR_NOT_SUPPORTED;
+    return ESP_FAIL;
 }
 
 bool task_manager_is_running(const char *name)
 {
     const task_item_t *item = find_task(name);
-    if (item && item->is_running) {
+    if (!item) {
+        return false;
+    }
+    if (item->is_running) {
         return item->is_running();
     }
     return false;
 }
 
-void task_manager_print_all_status(void)
+void task_manager_print_status(void)
 {
-    printf("\n================ [ 系统任务管理中间层状态 ] ================\n");
+    printf("\n================ [ 系统后台任务运行状态 ] ================\n");
     for (size_t i = 0; i < TASK_REGISTRY_SIZE; i++) {
         bool running = s_task_registry[i].is_running ? s_task_registry[i].is_running() : false;
-        printf("  [%zu] 任务标识 (Name) : %-10s | 描述: %s\n", i + 1, s_task_registry[i].name, s_task_registry[i].description);
-        printf("      运行状态 (Status): %s\n", running ? "正在运行 (Running)" : "已停止 (Stopped)");
-        if (i + 1 < TASK_REGISTRY_SIZE) {
-            printf("  ---------------------------------------------------------\n");
-        }
+        printf("  任务名称: %-10s | 状态: %s | 描述: %s\n",
+               s_task_registry[i].name,
+               running ? "🟢 [运行中]" : "🔴 [已停止]",
+               s_task_registry[i].description);
     }
-    printf("============================================================\n\n");
+    printf("==========================================================\n\n");
+}
+
+void task_manager_print_all_status(void)
+{
+    task_manager_print_status();
 }

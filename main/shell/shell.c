@@ -27,6 +27,7 @@
 #include "cmd_wifi.h"
 #include "cmd_nvs.h"
 #include "cmd_task.h"
+#include "cmd_ac.h"
 
 static const char* TAG = "shell";
 
@@ -159,6 +160,7 @@ static void register_all_commands(void)
 #endif
     register_nvs();
     register_cmd_task();
+    register_cmd_ac();
 }
 
 esp_err_t shell_init(void)

@@ -81,9 +81,14 @@ idf.py -p com6 flash monitor
 
 | 终端命令 | 说明 | 示例 |
 | :--- | :--- | :--- |
+| **`ac` / `ac get`** | 查看当前空调全量运行状态 | `ac` |
+| **`ac learn`** | 开启红外学码接收模式 (对准 IO5 按遥控器) | `ac learn 5` |
+| **`ac emit`** | 重发上一次成功学到的红外波形 | `ac emit` |
+| **`ac on` / `ac off`** | 快捷开机 / 关机 | `ac on` |
+| **`ac set`** | 固定位置参数设置空调并发送红外 | `ac set on cool 25 low` |
 | **`task status`** | 查看当前所有任务的运行状态 | `task status` |
-| **`task start <task>`**| 动态启动指定任务 (如 net) | `task start net` |
-| **`task stop <task>`** | 动态停止指定任务 | `task stop net` |
+| **`task start <task>`**| 动态启动指定任务 (如 net / control) | `task start control` |
+| **`task stop <task>`** | 动态停止指定任务 | `task stop control` |
 | **`nvs_list`** | 查看存储在 NVS 中的所有键值对 | `nvs_list nvs -n storage` |
 | **`nvs_set`** | 写入设置某个 Key 的值 | `nvs_set nvs storage wifi_ssid str -v MyWiFi` |
 | **`tasks`** | 列出系统底层所有 FreeRTOS 线程 CPU/内存占用 | `tasks` |
