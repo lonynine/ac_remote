@@ -27,6 +27,7 @@ static const task_item_t s_task_registry[] = {
 
 esp_err_t task_manager_init(void)
 {
+    ESP_LOGI(TAG, "任务管理中间层初始化完成");
     return ESP_OK;
 }
 
@@ -81,7 +82,7 @@ void task_manager_print_all_status(void)
         bool running = s_task_registry[i].is_running ? s_task_registry[i].is_running() : false;
         printf("  [%zu] 任务标识 (Name) : %-10s | 描述: %s\n", i + 1, s_task_registry[i].name, s_task_registry[i].description);
         printf("      运行状态 (Status): %s\n", running ? "正在运行 (Running)" : "已停止 (Stopped)");
-        if (i < TASK_REGISTRY_SIZE - 1) {
+        if (i + 1 < TASK_REGISTRY_SIZE) {
             printf("  ---------------------------------------------------------\n");
         }
     }
