@@ -40,6 +40,11 @@ esp_err_t i2c_driver_read(uint8_t dev_addr, uint8_t *out_data, size_t len);
  */
 esp_err_t i2c_driver_write_read(uint8_t dev_addr, const uint8_t *write_buf, size_t write_len, uint8_t *read_buf, size_t read_len);
 
+/**
+ * @brief 从缓存中移除指定 I2C 从设备
+ */
+esp_err_t i2c_driver_remove_device(uint8_t dev_addr);
+
 #ifdef __cplusplus
 }
 #endif

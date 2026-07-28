@@ -24,7 +24,6 @@
 #include "argtable3/argtable3.h"
 
 #include "cmd_system.h"
-#include "cmd_wifi.h"
 #include "cmd_nvs.h"
 #include "cmd_task.h"
 #include "cmd_ac.h"
@@ -154,9 +153,6 @@ static void register_all_commands(void)
 #endif
 #if SOC_DEEP_SLEEP_SUPPORTED
     register_system_deep_sleep();
-#endif
-#if (CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED)
-    register_wifi();
 #endif
     register_nvs();
     register_cmd_task();

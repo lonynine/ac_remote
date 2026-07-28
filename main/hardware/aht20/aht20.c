@@ -25,12 +25,22 @@ esp_err_t aht20_init(void)
     err = i2c_driver_read(AHT20_I2C_ADDR, &status, 1);
     if (err != ESP_OK || (status & 0x08) == 0) {
         uint8_t init_cmd[3] = {0xBE, 0x08, 0x00};
-        i2c_driver_write(AHT20_I2C_ADDR, init_cmd, 3);
+        err = i2c_driver_write(AHT20_I2C_ADDR, init_cmd, 3);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "init command failed: %s", esp_err_to_name(err));
+            return err;
+        }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    ESP_LOGI(TAG, "AHT20 温湿度传感器硬件驱动初始化成功! (I2C 地址: 0x38)");
+    ESP_LOGI(TAG, "ready addr=0x38");
     return ESP_OK;
+}
+
+esp_err_t aht20_deinit(void)
+{
+    esp_err_t err = i2c_driver_remove_device(AHT20_I2C_ADDR);
+    return (err == ESP_ERR_NOT_FOUND) ? ESP_OK : err;
 }
 
 esp_err_t aht20_read_data(float *out_temp, float *out_humi)

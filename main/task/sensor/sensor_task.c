@@ -11,7 +11,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
-static const char *TAG = "sensor_task";
+static const char *TAG = "sensor";
 
 static TaskHandle_t s_sensor_task_handle = NULL;
 static SemaphoreHandle_t s_sensor_mutex = NULL;
@@ -22,15 +22,26 @@ static sensor_data_t s_latest_data = {
     .valid = false
 };
 
+static void sensor_wait_ready(void)
+{
+    esp_err_t err;
+    do {
+        err = aht20_init();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "aht20 init failed: %s, retry later", esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
+    } while (err != ESP_OK);
+}
+
 static void sensor_task_proc(void *pvParameters)
 {
-    ESP_LOGI(TAG, "AHT20 温湿度传感器后台采集任务已启动，采集周期: 2 秒");
+    sensor_wait_ready();
 
     float temp = 0.0f;
     float humi = 0.0f;
 
     while (1) {
-        // 读取 AHT20 传感器 (校正为正确的 API: aht20_read_data)
         esp_err_t err = aht20_read_data(&temp, &humi);
         if (err == ESP_OK) {
             if (xSemaphoreTake(s_sensor_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -39,9 +50,10 @@ static void sensor_task_proc(void *pvParameters)
                 s_latest_data.valid = true;
                 xSemaphoreGive(s_sensor_mutex);
             }
-            ESP_LOGI(TAG, "🌡️ [温湿度采集成功] 当前环境温度: %.1f ℃  |  环境湿度: %.1f %%RH", temp, humi);
+            ESP_LOGI(TAG, "env temp=%.1fC humi=%.1f%%", temp, humi);
         } else {
-            ESP_LOGW(TAG, "⚠️ 读取 AHT20 温湿度传感器失败: %s", esp_err_to_name(err));
+            ESP_LOGW(TAG, "aht20 read failed: %s", esp_err_to_name(err));
+            sensor_wait_ready();
         }
 
         // 每 2 秒采集一次
@@ -86,6 +98,7 @@ esp_err_t sensor_task_stop(void)
     if (s_sensor_task_handle != NULL) {
         vTaskDelete(s_sensor_task_handle);
         s_sensor_task_handle = NULL;
+        aht20_deinit();
         ESP_LOGI(TAG, "温湿度采集任务已停止");
     }
     return ESP_OK;

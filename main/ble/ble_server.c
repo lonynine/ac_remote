@@ -23,8 +23,9 @@ static const char *TAG = "ble";
 #define GATTS_NUM_HANDLE_TEST       4
 
 static bool s_is_connected = false;
-static uint16_t s_gatts_if = ESP_GATT_IF_NONE;
+static esp_gatt_if_t s_gatts_if = ESP_GATT_IF_NONE;
 static uint16_t s_char_handle = 0;
+static uint16_t s_conn_id = 0;
 
 static esp_ble_adv_params_t adv_params = {
     .adv_int_min        = 0x20,
@@ -95,10 +96,12 @@ static void gatts_profile_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_
         break;
     case ESP_GATTS_CONNECT_EVT:
         s_is_connected = true;
+        s_conn_id = param->connect.conn_id;
         ESP_LOGI(TAG, "手机 App 已成功通过 BLE 连接到设备！");
         break;
     case ESP_GATTS_DISCONNECT_EVT:
         s_is_connected = false;
+        s_conn_id = 0;
         ESP_LOGI(TAG, "BLE 手机断开连接，重新启动广播...");
         esp_ble_gap_start_advertising(&adv_params);
         break;
@@ -128,10 +131,14 @@ esp_err_t ble_server_init(const char *device_name)
 {
     const char *name = (device_name && strlen(device_name) > 0) ? device_name : "ESP32S3-Control";
 
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+    esp_err_t ret = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "释放 Classic BT 内存失败: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    esp_err_t ret = esp_bt_controller_init(&bt_cfg);
+    ret = esp_bt_controller_init(&bt_cfg);
     if (ret) {
         ESP_LOGE(TAG, "初始化 BT 控制器失败: %s", esp_err_to_name(ret));
         return ret;
@@ -155,9 +162,21 @@ esp_err_t ble_server_init(const char *device_name)
         return ret;
     }
 
-    ESP_ERROR_CHECK(esp_ble_gatts_register_callback(gatts_event_handler));
-    ESP_ERROR_CHECK(esp_ble_gap_register_callback(gap_event_handler));
-    ESP_ERROR_CHECK(esp_ble_gatts_app_register(PROFILE_APP_ID));
+    ret = esp_ble_gatts_register_callback(gatts_event_handler);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "注册 GATTS 回调失败: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = esp_ble_gap_register_callback(gap_event_handler);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "注册 GAP 回调失败: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    ret = esp_ble_gatts_app_register(PROFILE_APP_ID);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "注册 GATTS app 失败: %s", esp_err_to_name(ret));
+        return ret;
+    }
 
     esp_ble_gap_set_device_name(name);
 
@@ -190,7 +209,7 @@ bool ble_server_is_connected(void)
 esp_err_t ble_server_stop(void)
 {
     if (s_is_connected) {
-        esp_ble_gatts_close(s_gatts_if, s_char_handle);
+        esp_ble_gatts_close(s_gatts_if, s_conn_id);
     }
     esp_bluedroid_disable();
     esp_bluedroid_deinit();

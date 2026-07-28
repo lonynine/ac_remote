@@ -12,7 +12,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-static const char *TAG = "control_task";
+static const char *TAG = "ctrl";
 
 static QueueHandle_t s_control_queue = NULL;
 static TaskHandle_t s_control_task_handle = NULL;

@@ -12,7 +12,7 @@
 #include <string.h>
 #include "esp_log.h"
 
-static const char *TAG = "task_mgr";
+static const char *TAG = "task";
 
 // 表驱动注册表：统一包含 net 任务、control 红外控制任务与 sensor 温湿度采集任务
 static const task_item_t s_task_registry[] = {

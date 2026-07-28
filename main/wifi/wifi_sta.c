@@ -19,6 +19,18 @@ static bool s_is_initialized = false;
 static bool s_is_connected = false;
 static esp_netif_t *s_sta_netif = NULL;
 
+static void wifi_fill_config(wifi_config_t *wifi_config, const char *ssid, const char *password)
+{
+    memset(wifi_config, 0, sizeof(*wifi_config));
+    strncpy((char*)wifi_config->sta.ssid, ssid, sizeof(wifi_config->sta.ssid) - 1);
+    wifi_config->sta.ssid[sizeof(wifi_config->sta.ssid) - 1] = '\0';
+    if (password) {
+        strncpy((char*)wifi_config->sta.password, password, sizeof(wifi_config->sta.password) - 1);
+        wifi_config->sta.password[sizeof(wifi_config->sta.password) - 1] = '\0';
+    }
+    wifi_config->sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+}
+
 static void event_handler(void* arg, esp_event_base_t event_base,
                             int32_t event_id, void* event_data)
 {
@@ -41,52 +53,79 @@ esp_err_t wifi_sta_init(const char *ssid, const char *password)
     }
 
     if (s_is_initialized) {
-        wifi_config_t wifi_config = { 0 };
-        strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
-        if (password) {
-            strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
-        }
-        wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        wifi_config_t wifi_config;
+        wifi_fill_config(&wifi_config, ssid, password);
         esp_wifi_disconnect();
-        esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
-        esp_wifi_connect();
-        return ESP_OK;
+        esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "set config failed: %s", esp_err_to_name(err));
+            return err;
+        }
+        err = esp_wifi_connect();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "connect failed: %s", esp_err_to_name(err));
+        }
+        return err;
     }
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    esp_err_t err = esp_event_loop_create_default();
+    esp_err_t err = esp_netif_init();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_ERROR_CHECK(err);
+        ESP_LOGE(TAG, "netif init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "event loop init failed: %s", esp_err_to_name(err));
+        return err;
     }
 
     s_sta_netif = esp_netif_create_default_wifi_sta();
+    if (!s_sta_netif) {
+        ESP_LOGE(TAG, "create STA netif failed");
+        return ESP_FAIL;
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    err = esp_wifi_init(&cfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "driver init failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     esp_event_handler_instance_t instance_any_id;
     esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));
-
-    wifi_config_t wifi_config = { 0 };
-    strncpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
-    if (password) {
-        strncpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+    err = esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                              &event_handler, NULL, &instance_any_id);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "wifi event register failed: %s", esp_err_to_name(err));
+        return err;
     }
-    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    err = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                              &event_handler, NULL, &instance_got_ip);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ip event register failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    wifi_config_t wifi_config;
+    wifi_fill_config(&wifi_config, ssid, password);
+
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set STA mode failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set config failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "start failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     s_is_initialized = true;
     return ESP_OK;

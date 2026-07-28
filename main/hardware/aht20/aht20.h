@@ -20,6 +20,11 @@ extern "C" {
 esp_err_t aht20_init(void);
 
 /**
+ * @brief 释放 AHT20 传感器 I2C 设备句柄
+ */
+esp_err_t aht20_deinit(void);
+
+/**
  * @brief 读取 AHT20 传感器当前的实时温度与相对湿度
  *
  * @param out_temp 温度输出 (单位: ℃)

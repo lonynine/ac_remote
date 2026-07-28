@@ -28,6 +28,18 @@ static const sys_config_t s_default_config = {
     .device_id = 1001
 };
 
+static void log_default_write_result(const char *key, esp_err_t err)
+{
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "write default %s failed: %s", key, esp_err_to_name(err));
+    }
+}
+
+static esp_err_t keep_first_error(esp_err_t current, esp_err_t next)
+{
+    return (current == ESP_OK) ? next : current;
+}
+
 esp_err_t sys_config_init(void)
 {
     if (s_is_initialized) {
@@ -45,29 +57,40 @@ esp_err_t sys_config_init(void)
     // (1) WiFi SSID
     err = nvs_driver_read_string(NVS_KEY_WIFI_SSID, s_current_config.wifi_ssid, sizeof(s_current_config.wifi_ssid));
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "read %s failed: %s, use default", NVS_KEY_WIFI_SSID, esp_err_to_name(err));
         strncpy(s_current_config.wifi_ssid, s_default_config.wifi_ssid, sizeof(s_current_config.wifi_ssid) - 1);
-        nvs_driver_write_string(NVS_KEY_WIFI_SSID, s_current_config.wifi_ssid);
+        s_current_config.wifi_ssid[sizeof(s_current_config.wifi_ssid) - 1] = '\0';
+        log_default_write_result(NVS_KEY_WIFI_SSID,
+                                 nvs_driver_write_string(NVS_KEY_WIFI_SSID, s_current_config.wifi_ssid));
     }
 
     // (2) WiFi 密码
     err = nvs_driver_read_string(NVS_KEY_WIFI_PASS, s_current_config.wifi_password, sizeof(s_current_config.wifi_password));
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "read %s failed: %s, use default", NVS_KEY_WIFI_PASS, esp_err_to_name(err));
         strncpy(s_current_config.wifi_password, s_default_config.wifi_password, sizeof(s_current_config.wifi_password) - 1);
-        nvs_driver_write_string(NVS_KEY_WIFI_PASS, s_current_config.wifi_password);
+        s_current_config.wifi_password[sizeof(s_current_config.wifi_password) - 1] = '\0';
+        log_default_write_result(NVS_KEY_WIFI_PASS,
+                                 nvs_driver_write_string(NVS_KEY_WIFI_PASS, s_current_config.wifi_password));
     }
 
     // (3) 设备名称
     err = nvs_driver_read_string(NVS_KEY_DEVICE_NAME, s_current_config.device_name, sizeof(s_current_config.device_name));
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "read %s failed: %s, use default", NVS_KEY_DEVICE_NAME, esp_err_to_name(err));
         strncpy(s_current_config.device_name, s_default_config.device_name, sizeof(s_current_config.device_name) - 1);
-        nvs_driver_write_string(NVS_KEY_DEVICE_NAME, s_current_config.device_name);
+        s_current_config.device_name[sizeof(s_current_config.device_name) - 1] = '\0';
+        log_default_write_result(NVS_KEY_DEVICE_NAME,
+                                 nvs_driver_write_string(NVS_KEY_DEVICE_NAME, s_current_config.device_name));
     }
 
     // (4) 设备 ID
     err = nvs_driver_read_u16(NVS_KEY_DEVICE_ID, &s_current_config.device_id);
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "read %s failed: %s, use default", NVS_KEY_DEVICE_ID, esp_err_to_name(err));
         s_current_config.device_id = s_default_config.device_id;
-        nvs_driver_write_u16(NVS_KEY_DEVICE_ID, s_current_config.device_id);
+        log_default_write_result(NVS_KEY_DEVICE_ID,
+                                 nvs_driver_write_u16(NVS_KEY_DEVICE_ID, s_current_config.device_id));
     }
 
     s_is_initialized = true;
@@ -97,11 +120,15 @@ esp_err_t sys_config_save(const sys_config_t *config)
         return ESP_ERR_INVALID_ARG;
     }
 
-    // 分别持久化各个独立的 Key 到 storage 分区
-    nvs_driver_write_string(NVS_KEY_WIFI_SSID, config->wifi_ssid);
-    nvs_driver_write_string(NVS_KEY_WIFI_PASS, config->wifi_password);
-    nvs_driver_write_string(NVS_KEY_DEVICE_NAME, config->device_name);
-    nvs_driver_write_u16(NVS_KEY_DEVICE_ID, config->device_id);
+    esp_err_t err = ESP_OK;
+    err = keep_first_error(err, nvs_driver_write_string(NVS_KEY_WIFI_SSID, config->wifi_ssid));
+    err = keep_first_error(err, nvs_driver_write_string(NVS_KEY_WIFI_PASS, config->wifi_password));
+    err = keep_first_error(err, nvs_driver_write_string(NVS_KEY_DEVICE_NAME, config->device_name));
+    err = keep_first_error(err, nvs_driver_write_u16(NVS_KEY_DEVICE_ID, config->device_id));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "save config failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     memcpy(&s_current_config, config, sizeof(sys_config_t));
     return ESP_OK;

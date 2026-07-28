@@ -6,6 +6,9 @@
 
 #include "ir_protocol.h"
 #include <stdio.h>
+#include "esp_log.h"
+
+static const char *TAG = "proto";
 
 size_t ir_protocol_append_byte(rmt_symbol_word_t *symbols, size_t index, uint8_t data, 
                                 uint32_t mark_us, uint32_t space0_us, uint32_t space1_us)
@@ -25,10 +28,16 @@ void ir_protocol_print_hex(const char *brand_name, const uint8_t *bytes, size_t 
 {
     if (!bytes || len == 0) return;
 
-    printf("\n========================================================================\n");
-    printf("📦 [%s纯 C 协议组帧] 16 进制原始 Hex 数据帧 (%zu 字节):\n   ", brand_name ? brand_name : "空调", len);
-    for (size_t i = 0; i < len; i++) {
-        printf("0x%02X ", bytes[i]);
+    char hex[3 * 64 + 1] = {0};
+    size_t pos = 0;
+    size_t max_len = (len < 64) ? len : 64;
+    for (size_t i = 0; i < max_len && pos < sizeof(hex); i++) {
+        int written = snprintf(hex + pos, sizeof(hex) - pos, "%02X ", bytes[i]);
+        if (written < 0 || (size_t)written >= sizeof(hex) - pos) {
+            break;
+        }
+        pos += (size_t)written;
     }
-    printf("\n========================================================================\n\n");
+    ESP_LOGI(TAG, "%s frame len=%zu data=%s%s",
+             brand_name ? brand_name : "ac", len, hex, (len > max_len) ? "..." : "");
 }

@@ -45,8 +45,14 @@ static int do_cmd_ac(int argc, char **argv)
         if (argc >= 3 && is_number(argv[2])) {
             timeout = (uint32_t)atoi(argv[2]);
         }
-        ir_remote_learn_start(timeout);
-        return 0;
+        printf("开始红外学习，等待 %lu 秒...\n", (unsigned long)timeout);
+        esp_err_t err = ir_remote_learn_start(timeout);
+        if (err != ESP_OK) {
+            printf("红外学习失败: %s\n", esp_err_to_name(err));
+            return err;
+        }
+        printf("红外学习结束，可使用 ac emit 重发最后一次捕获的波形。\n");
+        return ESP_OK;
     }
 
     if (strcasecmp(action, "emit") == 0) {

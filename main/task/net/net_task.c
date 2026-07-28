@@ -12,7 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-static const char *TAG = "net_task";
+static const char *TAG = "net";
 static TaskHandle_t s_net_task_handle = NULL;
 
 static void net_task_entry(void *pvParameters)
@@ -22,7 +22,12 @@ static void net_task_entry(void *pvParameters)
         if (sys_config_get(&cfg) == ESP_OK && strlen(cfg.wifi_ssid) > 0) {
 
             if (!wifi_sta_is_connected()) {
-                wifi_sta_init(cfg.wifi_ssid, cfg.wifi_password);
+                esp_err_t err = wifi_sta_init(cfg.wifi_ssid, cfg.wifi_password);
+                if (err != ESP_OK) {
+                    ESP_LOGW(TAG, "wifi init/connect failed: %s", esp_err_to_name(err));
+                    vTaskDelay(pdMS_TO_TICKS(3000));
+                    continue;
+                }
 
                 for (int i = 0; i < 10; i++) {
                     if (wifi_sta_is_connected()) {

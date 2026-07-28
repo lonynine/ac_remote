@@ -7,6 +7,7 @@
 #ifndef IR_DRIVER_H
 #define IR_DRIVER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "esp_err.h"
@@ -17,25 +18,24 @@
 extern "C" {
 #endif
 
-/**
- * @brief 初始化底层 RMT 脉冲发送总线 (38kHz 载波调制)
- */
-esp_err_t ir_driver_tx_init(gpio_num_t gpio_num, uint32_t carrier_freq_hz);
+typedef bool (*ir_driver_rx_done_cb_t)(const rmt_symbol_word_t *symbols,
+                                       size_t num_symbols,
+                                       bool is_last,
+                                       void *user_data);
 
-/**
- * @brief 底层发波：直接向 RMT 发送原始脉冲符号数组
- */
+esp_err_t ir_driver_tx_init(gpio_num_t gpio_num, uint32_t carrier_freq_hz);
 esp_err_t ir_driver_tx_symbols(const rmt_symbol_word_t *symbols, size_t count);
 
-/**
- * @brief 初始化底层 RMT 脉冲接收总线
- */
 esp_err_t ir_driver_rx_init(gpio_num_t gpio_num);
+esp_err_t ir_driver_rx_register_done_callback(ir_driver_rx_done_cb_t cb, void *user_data);
+esp_err_t ir_driver_rx_start(rmt_symbol_word_t *symbols_buf, size_t buf_capacity);
+esp_err_t ir_driver_rx_stop(void);
 
-/**
- * @brief 底层接收：阻塞接收遥控器发出的红外原始脉冲符号数据
- */
-esp_err_t ir_driver_rx_receive(rmt_symbol_word_t *symbols_buf, size_t buf_capacity, size_t *out_count, uint32_t timeout_ms);
+/* Compatibility wrapper: starts one async receive job; RX data is reported by callback users. */
+esp_err_t ir_driver_rx_receive(rmt_symbol_word_t *symbols_buf,
+                               size_t buf_capacity,
+                               size_t *out_count,
+                               uint32_t timeout_ms);
 
 #ifdef __cplusplus
 }
