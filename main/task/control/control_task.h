@@ -8,7 +8,7 @@
 #define CONTROL_TASK_H
 
 #include "esp_err.h"
-#include "ir_protocol.h"
+#include "ac_types.h"
 
 #ifdef __cplusplus
 extern "C" {

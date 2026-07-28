@@ -10,7 +10,7 @@ idf_component_register(SRCS "main.c"
                             "protocol/haier_protocol.c"
                             "protocol/gree_protocol.c"
                             "config/config.c"
-                            "config/ac_state.c"
+                            "ac/ac_state.c"
                             "wifi/wifi_sta.c"
                             "ble/ble_server.c"
                             "task/task_manager.c"
@@ -23,4 +23,4 @@ idf_component_register(SRCS "main.c"
                                      esp_wifi esp_event esp_netif bt cmd_task
                        INCLUDE_DIRS "." "shell" "driver/nvs" "driver/ir" "driver/i2c"
                                     "hardware/aht20" "hardware/ir_remote" "protocol"
-                                    "config" "wifi" "ble" "task" "task/net" "task/control" "task/sensor")
+                                    "config" "ac" "wifi" "ble" "task" "task/net" "task/control" "task/sensor")

@@ -51,13 +51,17 @@ static int do_cmd_ac(int argc, char **argv)
 
     if (strcasecmp(action, "emit") == 0) {
         // 唯一的硬件管控入口：推入队列
-        control_task_post_emit();
+        esp_err_t err = control_task_post_emit();
+        if (err != ESP_OK) {
+            printf("推入 'ac emit' 重发指令失败: %s\n", esp_err_to_name(err));
+            return err;
+        }
         printf("已将 'ac emit' 重发指令推入独占控制队列...\n");
-        return 0;
+        return ESP_OK;
     }
 
     // 默认指令参数构造
-    ac_remote_cmd_t cmd;
+    ac_remote_cmd_t cmd = {0};
     cmd.brand = AC_BRAND_HAIER;
     cmd.power = true;
     cmd.mode = AC_MODE_COOL;
@@ -124,11 +128,15 @@ static int do_cmd_ac(int argc, char **argv)
     }
 
     // 唯一的硬件管控入口：推入队列
-    control_task_post_cmd(&cmd);
+    esp_err_t err = control_task_post_cmd(&cmd);
+    if (err != ESP_OK) {
+        printf("推入空调控制指令失败: %s\n", esp_err_to_name(err));
+        return err;
+    }
     printf("已将空调控制指令推入 FreeRTOS 独占队列 (品牌:%d | %s | %d℃ | 模式:%d)...\n",
            cmd.brand, cmd.power ? "开机" : "关机", cmd.temp, cmd.mode);
 
-    return 0;
+    return ESP_OK;
 }
 
 esp_err_t register_cmd_ac(void)

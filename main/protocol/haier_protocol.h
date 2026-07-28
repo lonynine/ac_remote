@@ -13,6 +13,19 @@
 extern "C" {
 #endif
 
+#define HAIER_YRW02_FRAME_LEN 14
+
+/**
+ * @brief Build a Haier YRW02 14-byte state frame.
+ */
+esp_err_t haier_yrw02_build_frame(const ac_remote_cmd_t *cmd,
+                                  uint8_t frame[HAIER_YRW02_FRAME_LEN]);
+
+/**
+ * @brief Calculate the low 8 bits of the byte sum.
+ */
+uint8_t haier_yrw02_checksum(const uint8_t *bytes, size_t len);
+
 /**
  * @brief 海尔空调 (Haier YRW02 / 05) 纯 C 协议组帧算法
  * @param cmd 空调控制状态参数

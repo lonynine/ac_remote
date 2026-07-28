@@ -8,6 +8,9 @@
 
 * **层次化模块解耦架构**：
   * `driver/`：硬件外设与存储驱动层
+  * `hardware/`：板载器件抽象层（红外收发器、AHT20 等）
+  * `protocol/`：空调红外协议编码层
+  * `ac/`：空调通用类型与状态管理层
   * `config/`：应用配置与数据持久化层
   * `wifi/` & `ble/`：无线通信协议层
   * `task/`：独立的 FreeRTOS 任务调度管理中间层
@@ -42,6 +45,9 @@ esp32s3/
 │   │       └── net_task.c
 │   ├── driver/                # 底层驱动
 │   │   └── nvs/               # NVS 存储驱动 (storage 命名空间)
+│   ├── hardware/              # 板载器件抽象 (红外收发、AHT20)
+│   ├── protocol/              # 空调红外协议编码 (Haier YRW02 / Gree)
+│   ├── ac/                    # 空调类型与状态管理
 │   ├── config/                # 应用配置保存与读取 (sys_config_t)
 │   ├── wifi/                  # WiFi STA 模式模块
 │   ├── ble/                   # BLE GATT Server 蓝牙调参模块

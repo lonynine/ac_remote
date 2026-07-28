@@ -16,52 +16,104 @@
 #define HAIER_BIT_0_SPACE_US 530
 #define HAIER_BIT_1_SPACE_US 1700
 
-esp_err_t haier_protocol_encode(const ac_remote_cmd_t *cmd,
-                                rmt_symbol_word_t *symbols, size_t symbol_max,
-                                size_t *out_count) {
-  if (!cmd || !symbols || !out_count || symbol_max < 120) {
+#define HAIER_YRW02_SYMBOL_COUNT (2 + HAIER_YRW02_FRAME_LEN * 8 + 1)
+
+#define HAIER_YRW02_MODEL_A 0xA6
+#define HAIER_YRW02_POWER_BIT 0x40
+#define HAIER_YRW02_SWING_V_DEFAULT 0x0A
+#define HAIER_YRW02_BUTTON_POWER 0x05
+
+static uint8_t haier_yrw02_temp_code(uint8_t temp)
+{
+  if (temp < 16 || temp > 30) {
+    temp = 25;
+  }
+  return temp - 16;
+}
+
+static uint8_t haier_yrw02_mode_code(ac_mode_t mode)
+{
+  switch (mode) {
+  case AC_MODE_AUTO:
+    return 0;
+  case AC_MODE_COOL:
+    return 1;
+  case AC_MODE_DRY:
+    return 2;
+  case AC_MODE_HEAT:
+    return 4;
+  case AC_MODE_FAN:
+    return 6;
+  default:
+    return 1;
+  }
+}
+
+static uint8_t haier_yrw02_fan_code(ac_fan_t fan)
+{
+  switch (fan) {
+  case AC_FAN_HIGH:
+    return 1;
+  case AC_FAN_MED:
+    return 2;
+  case AC_FAN_LOW:
+    return 3;
+  case AC_FAN_AUTO:
+    return 5;
+  default:
+    return 3;
+  }
+}
+
+uint8_t haier_yrw02_checksum(const uint8_t *bytes, size_t len)
+{
+  uint16_t sum = 0;
+  if (!bytes) {
+    return 0;
+  }
+
+  for (size_t i = 0; i < len; i++) {
+    sum += bytes[i];
+  }
+  return (uint8_t)sum;
+}
+
+esp_err_t haier_yrw02_build_frame(const ac_remote_cmd_t *cmd,
+                                  uint8_t frame[HAIER_YRW02_FRAME_LEN])
+{
+  if (!cmd || !frame) {
     return ESP_ERR_INVALID_ARG;
   }
 
-  /*
-      海尔真实抓包14字节 (100% 物理复现)
+  memset(frame, 0, HAIER_YRW02_FRAME_LEN);
 
-      ON:
-      A6 9A 00 00 40 60 00 20 00 00 00 00 05 05
+  frame[0] = HAIER_YRW02_MODEL_A;
+  // The low nibble stays at the captured default until swing samples are added.
+  frame[1] = (haier_yrw02_temp_code(cmd->temp) << 4) | HAIER_YRW02_SWING_V_DEFAULT;
+  frame[4] = cmd->power ? HAIER_YRW02_POWER_BIT : 0x00;
+  frame[5] = haier_yrw02_fan_code(cmd->fan) << 5;
+  frame[7] = haier_yrw02_mode_code(cmd->mode) << 5;
+  frame[12] = HAIER_YRW02_BUTTON_POWER;
+  frame[13] = haier_yrw02_checksum(frame, HAIER_YRW02_FRAME_LEN - 1);
 
-      OFF:
-      A6 9A 00 00 00 60 00 20 00 00 00 00 05 C5
-  */
+  return ESP_OK;
+}
 
-  uint8_t bytes[14];
-
-  bytes[0] = 0xA6;
-  bytes[1] = 0x9A;
-  bytes[2] = 0x00;
-  bytes[3] = 0x00;
-
-  if (cmd->power) {
-    // 开机
-    bytes[4] = 0x40;
-    bytes[5] = 0x60;
-    bytes[13] = 0x05;
-  } else {
-    // 关机
-    bytes[4] = 0x00;
-    bytes[5] = 0x60;
-    bytes[13] = 0xC5;
+esp_err_t haier_protocol_encode(const ac_remote_cmd_t *cmd,
+                                rmt_symbol_word_t *symbols, size_t symbol_max,
+                                size_t *out_count) {
+  if (!cmd || !symbols || !out_count || symbol_max < HAIER_YRW02_SYMBOL_COUNT) {
+    return ESP_ERR_INVALID_ARG;
   }
 
-  bytes[6] = 0x00;
-  bytes[7] = 0x20;
-  bytes[8] = 0x00;
-  bytes[9] = 0x00;
-  bytes[10] = 0x00;
-  bytes[11] = 0x00;
+  uint8_t bytes[HAIER_YRW02_FRAME_LEN];
+  esp_err_t err = haier_yrw02_build_frame(cmd, bytes);
+  if (err != ESP_OK) {
+    return err;
+  }
 
-  bytes[12] = 0x05;
-
-  ir_protocol_print_hex("海尔空调真实物理帧 (精确 115 组脉冲)", bytes, 14);
+  ir_protocol_print_hex("海尔空调真实物理帧 (精确 115 组脉冲)",
+                        bytes, HAIER_YRW02_FRAME_LEN);
 
   size_t idx = 0;
 

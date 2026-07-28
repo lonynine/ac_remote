@@ -29,14 +29,21 @@ static void control_task_proc(void *pvParameters)
 
             if (msg.type == CONTROL_MSG_TYPE_CMD) {
                 // 独占驱动硬件发送
-                ir_remote_send_cmd(&msg.cmd);
+                esp_err_t err = ir_remote_send_cmd(&msg.cmd);
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "红外发波失败，状态缓存不更新: %s", esp_err_to_name(err));
+                    continue;
+                }
+
                 // 更新全局状态缓存
                 ac_state_t state;
-                state.power = msg.cmd.power;
-                state.mode = msg.cmd.mode;
-                state.temp = msg.cmd.temp;
-                state.fan = msg.cmd.fan;
-                ac_state_set(&state);
+                if (ac_state_get(&state) == ESP_OK) {
+                    state.power = msg.cmd.power;
+                    state.mode = msg.cmd.mode;
+                    state.temp = msg.cmd.temp;
+                    state.fan = msg.cmd.fan;
+                    ac_state_set(&state);
+                }
             } else if (msg.type == CONTROL_MSG_TYPE_EMIT) {
                 // 独占驱动硬件重发学到的波形
                 ir_remote_learn_emit();
@@ -97,7 +104,7 @@ esp_err_t control_task_post_cmd(const ac_remote_cmd_t *cmd)
         return ESP_ERR_INVALID_STATE;
     }
 
-    control_msg_t msg;
+    control_msg_t msg = {0};
     msg.type = CONTROL_MSG_TYPE_CMD;
     msg.cmd = *cmd;
 
@@ -115,7 +122,7 @@ esp_err_t control_task_post_emit(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    control_msg_t msg;
+    control_msg_t msg = {0};
     msg.type = CONTROL_MSG_TYPE_EMIT;
 
     if (xQueueSend(s_control_queue, &msg, pdMS_TO_TICKS(500)) != pdTRUE) {

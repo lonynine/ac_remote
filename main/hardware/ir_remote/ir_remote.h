@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include "esp_err.h"
 #include "driver/gpio.h"
-#include "ir_protocol.h"
+#include "ac_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,23 +19,6 @@ extern "C" {
 
 #define IR_TX_GPIO_NUM  GPIO_NUM_4  // 红外发送引脚: IO4
 #define IR_RX_GPIO_NUM  GPIO_NUM_5  // 红外接收引脚: IO5
-
-// 兼容别名
-typedef ac_mode_t gree_mode_t;
-typedef ac_fan_t  gree_fan_t;
-typedef ac_mode_t haier_mode_t;
-typedef ac_fan_t  haier_fan_t;
-
-#define GREE_MODE_AUTO AC_MODE_AUTO
-#define GREE_MODE_COOL AC_MODE_COOL
-#define GREE_MODE_DRY  AC_MODE_DRY
-#define GREE_MODE_FAN  AC_MODE_FAN
-#define GREE_MODE_HEAT AC_MODE_HEAT
-
-#define GREE_FAN_AUTO  AC_FAN_AUTO
-#define GREE_FAN_LOW   AC_FAN_LOW
-#define GREE_FAN_MED   AC_FAN_MED
-#define GREE_FAN_HIGH  AC_FAN_HIGH
 
 typedef ac_remote_cmd_t haier_ac_status_t;
 typedef ac_remote_cmd_t gree_ac_status_t;

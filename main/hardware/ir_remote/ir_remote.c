@@ -62,7 +62,7 @@ esp_err_t ir_remote_send_cmd(const ac_remote_cmd_t *cmd)
             err = gree_protocol_encode(cmd, symbols, 140, &symbol_count);
             break;
         default:
-            err = haier_protocol_encode(cmd, symbols, 140, &symbol_count);
+            err = ESP_ERR_NOT_SUPPORTED;
             break;
     }
 
