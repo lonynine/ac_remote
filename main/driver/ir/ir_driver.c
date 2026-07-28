@@ -137,6 +137,30 @@ esp_err_t ir_driver_tx_symbols(const rmt_symbol_word_t *symbols, size_t count)
     return ESP_OK;
 }
 
+esp_err_t ir_driver_tx_set_carrier(uint32_t carrier_freq_hz)
+{
+    if (!s_tx_channel) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (carrier_freq_hz == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (carrier_freq_hz == s_tx_carrier_freq_hz) {
+        return ESP_OK;
+    }
+
+    const rmt_carrier_config_t carrier_config = {
+        .duty_cycle = IR_TX_CARRIER_DUTY,
+        .frequency_hz = carrier_freq_hz,
+        .flags.polarity_active_low = false,
+    };
+    esp_err_t err = rmt_apply_carrier(s_tx_channel, &carrier_config);
+    if (err == ESP_OK) {
+        s_tx_carrier_freq_hz = carrier_freq_hz;
+    }
+    return err;
+}
+
 esp_err_t ir_driver_rx_init(gpio_num_t gpio_num)
 {
     if (s_rx_channel != NULL) {

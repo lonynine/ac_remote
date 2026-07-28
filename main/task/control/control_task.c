@@ -7,6 +7,7 @@
 #include "control_task.h"
 #include "ir_remote.h"
 #include "ac_state.h"
+#include "protocol_manager.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -27,9 +28,17 @@ static void control_task_proc(void *pvParameters)
         if (xQueueReceive(s_control_queue, &msg, portMAX_DELAY) == pdTRUE) {
             ESP_LOGI(TAG, "📬 [队列接收消息] 开始处理红外发波请求 (消息类型: %d)...", msg.type);
 
-            if (msg.type == CONTROL_MSG_TYPE_CMD) {
-                // 独占驱动硬件发送
-                esp_err_t err = ir_remote_send_cmd(&msg.cmd);
+            if (msg.type == CONTROL_MSG_TYPE_REQUEST) {
+                ir_frame_t frame;
+                esp_err_t err = ac_protocol_encode(&msg.request, &frame);
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "协议编码失败 brand=%s action=%d: %s",
+                             ac_protocol_brand_name(msg.request.brand),
+                             msg.request.action, esp_err_to_name(err));
+                    continue;
+                }
+
+                err = ir_remote_send_frame(&frame);
                 if (err != ESP_OK) {
                     ESP_LOGE(TAG, "红外发波失败，状态缓存不更新: %s", esp_err_to_name(err));
                     continue;
@@ -38,10 +47,30 @@ static void control_task_proc(void *pvParameters)
                 // 更新全局状态缓存
                 ac_state_t state;
                 if (ac_state_get(&state) == ESP_OK) {
-                    state.power = msg.cmd.power;
-                    state.mode = msg.cmd.mode;
-                    state.temp = msg.cmd.temp;
-                    state.fan = msg.cmd.fan;
+                    bool brand_changed = state.brand != msg.request.brand;
+                    state.brand = msg.request.brand;
+                    state.power = msg.request.power;
+                    state.mode = msg.request.mode;
+                    state.temp = msg.request.temp;
+                    state.fan = msg.request.fan;
+                    if (brand_changed) {
+                        state.timer_mode = AC_TIMER_NONE;
+                        state.on_timer_min = 0;
+                        state.off_timer_min = 0;
+                    }
+                    if (msg.request.action == AC_ACTION_TIMER_ON) {
+                        state.timer_mode = AC_TIMER_ON;
+                        state.on_timer_min = msg.request.timer_minutes;
+                        state.off_timer_min = 0;
+                    } else if (msg.request.action == AC_ACTION_TIMER_OFF) {
+                        state.timer_mode = AC_TIMER_OFF;
+                        state.on_timer_min = 0;
+                        state.off_timer_min = msg.request.timer_minutes;
+                    } else if (msg.request.action == AC_ACTION_TIMER_CANCEL) {
+                        state.timer_mode = AC_TIMER_NONE;
+                        state.on_timer_min = 0;
+                        state.off_timer_min = 0;
+                    }
                     ac_state_set(&state);
                 }
             } else if (msg.type == CONTROL_MSG_TYPE_EMIT) {
@@ -98,15 +127,15 @@ bool control_task_is_running(void)
     return s_control_task_handle != NULL;
 }
 
-esp_err_t control_task_post_cmd(const ac_remote_cmd_t *cmd)
+esp_err_t control_task_post_request(const ac_request_t *request)
 {
-    if (s_control_queue == NULL || cmd == NULL) {
+    if (s_control_queue == NULL || request == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
 
     control_msg_t msg = {0};
-    msg.type = CONTROL_MSG_TYPE_CMD;
-    msg.cmd = *cmd;
+    msg.type = CONTROL_MSG_TYPE_REQUEST;
+    msg.request = *request;
 
     if (xQueueSend(s_control_queue, &msg, pdMS_TO_TICKS(500)) != pdTRUE) {
         ESP_LOGE(TAG, "控制队列已满，推入发波指令失败!");

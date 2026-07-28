@@ -14,7 +14,7 @@ extern "C" {
 #endif
 
 /**
- * @brief 注册空调控制 CLI 命令行指令 ('ac set', 'ac send', 'ac learn', 'ac emit' 等)
+ * @brief 注册空调控制 CLI 命令行指令 ('ac send', 'ac timer', 'ac learn', 'ac emit' 等)
  */
 esp_err_t register_cmd_ac(void);
 

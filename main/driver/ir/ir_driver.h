@@ -24,6 +24,7 @@ typedef bool (*ir_driver_rx_done_cb_t)(const rmt_symbol_word_t *symbols,
                                        void *user_data);
 
 esp_err_t ir_driver_tx_init(gpio_num_t gpio_num, uint32_t carrier_freq_hz);
+esp_err_t ir_driver_tx_set_carrier(uint32_t carrier_freq_hz);
 esp_err_t ir_driver_tx_symbols(const rmt_symbol_word_t *symbols, size_t count);
 
 esp_err_t ir_driver_rx_init(gpio_num_t gpio_num);

@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include "esp_err.h"
 #include "driver/gpio.h"
-#include "ac_types.h"
+#include "protocol_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,24 +20,15 @@ extern "C" {
 #define IR_TX_GPIO_NUM  GPIO_NUM_4  // 红外发送引脚: IO4
 #define IR_RX_GPIO_NUM  GPIO_NUM_5  // 红外接收引脚: IO5
 
-typedef ac_remote_cmd_t haier_ac_status_t;
-typedef ac_remote_cmd_t gree_ac_status_t;
-
 /**
  * @brief 初始化红外遥控硬件设备 (TX: IO4, RX: IO5)
  */
 esp_err_t ir_remote_init(void);
 
 /**
- * @brief 统一纯 C 语言红外遥控数据包发送接口 (基于 main/protocol/ 纯 C 协议层)
+ * @brief 发送协议层已经编码完成的红外帧
  */
-esp_err_t ir_remote_send_cmd(const ac_remote_cmd_t *cmd);
-
-/**
- * @brief 兼容接口：发送海尔/格力空调数据包
- */
-esp_err_t ir_remote_send_haier(const haier_ac_status_t *status);
-esp_err_t ir_remote_send_gree(const gree_ac_status_t *status);
+esp_err_t ir_remote_send_frame(const ir_frame_t *frame);
 
 /**
  * @brief 开启红外学码功能

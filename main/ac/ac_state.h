@@ -17,13 +17,16 @@ extern "C" {
 #endif
 
 typedef struct {
+    ac_brand_t brand;
     bool power;
     ac_mode_t mode;
     uint8_t temp;
     ac_fan_t fan;
     bool swing;
     bool light;
-    uint16_t timer_min;
+    ac_timer_mode_t timer_mode;
+    uint16_t on_timer_min;
+    uint16_t off_timer_min;
 } ac_state_t;
 
 esp_err_t ac_state_init(void);

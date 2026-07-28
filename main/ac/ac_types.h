@@ -36,15 +36,13 @@ typedef enum {
     AC_FAN_HIGH = 3,
 } ac_fan_t;
 
-typedef struct {
-    ac_brand_t brand;
-    bool power;
-    ac_mode_t mode;
-    uint8_t temp;
-    ac_fan_t fan;
-    bool swing;
-    bool light;
-} ac_remote_cmd_t;
+typedef enum {
+    AC_TIMER_NONE        = 0,
+    AC_TIMER_OFF         = 1,
+    AC_TIMER_ON          = 2,
+    AC_TIMER_ON_THEN_OFF = 4,
+    AC_TIMER_OFF_THEN_ON = 5,
+} ac_timer_mode_t;
 
 typedef ac_mode_t gree_mode_t;
 typedef ac_fan_t  gree_fan_t;

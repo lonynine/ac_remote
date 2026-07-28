@@ -8,7 +8,7 @@
 #define CONTROL_TASK_H
 
 #include "esp_err.h"
-#include "ac_types.h"
+#include "protocol_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -16,14 +16,14 @@ extern "C" {
 
 // 控制消息类型
 typedef enum {
-    CONTROL_MSG_TYPE_CMD = 0,   // 标准空调控制指令 (ac_remote_cmd_t)
+    CONTROL_MSG_TYPE_REQUEST = 0,
     CONTROL_MSG_TYPE_EMIT = 1,  // 重发上一次学到的红外波形
 } control_msg_type_t;
 
 // 统一控制消息结构体
 typedef struct {
     control_msg_type_t type;
-    ac_remote_cmd_t cmd;
+    ac_request_t request;
 } control_msg_t;
 
 /**
@@ -47,9 +47,9 @@ esp_err_t control_task_stop(void);
 bool control_task_is_running(void);
 
 /**
- * @brief 唯一安全发波入口：向控制队列发送指令 (硬件资源独占保护)
+ * @brief 提交通用空调控制意图，由控制任务统一编码并发送
  */
-esp_err_t control_task_post_cmd(const ac_remote_cmd_t *cmd);
+esp_err_t control_task_post_request(const ac_request_t *request);
 
 /**
  * @brief 唯一安全发波入口：向控制队列发送重发学码指令

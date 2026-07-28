@@ -9,7 +9,7 @@
 * **层次化模块解耦架构**：
   * `driver/`：硬件外设与存储驱动层
   * `hardware/`：板载器件抽象层（红外收发器、AHT20 等）
-  * `protocol/`：空调红外协议编码层
+  * `protocol/`：空调控制意图、协议路由和品牌红外编码层
   * `ac/`：空调通用类型与状态管理层
   * `config/`：应用配置与数据持久化层
   * `wifi/` & `ble/`：无线通信协议层
@@ -46,7 +46,11 @@ esp32s3/
 │   ├── driver/                # 底层驱动
 │   │   └── nvs/               # NVS 存储驱动 (storage 命名空间)
 │   ├── hardware/              # 板载器件抽象 (红外收发、AHT20)
-│   ├── protocol/              # 空调红外协议编码 (Haier YRW02 / Gree)
+│   ├── protocol/              # 空调协议管理中间层
+│   │   ├── protocol_types.h   # 通用控制意图与红外帧
+│   │   ├── protocol_manager.* # 品牌路由、能力检查与统一编码
+│   │   ├── haier/             # 海尔 YRW02 协议
+│   │   └── gree/              # 格力协议
 │   ├── ac/                    # 空调类型与状态管理
 │   ├── config/                # 应用配置保存与读取 (sys_config_t)
 │   ├── wifi/                  # WiFi STA 模式模块
@@ -87,11 +91,15 @@ idf.py -p com6 flash monitor
 
 | 终端命令 | 说明 | 示例 |
 | :--- | :--- | :--- |
-| **`ac` / `ac get`** | 查看当前空调全量运行状态 | `ac` |
+| **`ac` / `ac help`** | 查看空调控制命令帮助 | `ac help` |
+| **`ac get`** | 查看最后发送的空调缓存状态 | `ac get` |
 | **`ac learn`** | 开启红外学码接收模式 (对准 IO5 按遥控器) | `ac learn 5` |
 | **`ac emit`** | 重发上一次成功学到的红外波形 | `ac emit` |
 | **`ac on` / `ac off`** | 快捷开机 / 关机 | `ac on` |
-| **`ac set`** | 固定位置参数设置空调并发送红外 | `ac set on cool 25 low` |
+| **`ac send`** | 按品牌和状态发送空调红外指令 | `ac send haier on cool 25 low` |
+| **`ac timer <brand> on <minutes>`** | 设置空调自身延时开机（当前仅海尔） | `ac timer haier on 60` |
+| **`ac timer <brand> off <minutes>`** | 设置空调自身延时关机（当前仅海尔） | `ac timer haier off 90` |
+| **`ac timer <brand> cancel`** | 取消空调自身定时（当前仅海尔） | `ac timer haier cancel` |
 | **`task status`** | 查看当前所有任务的运行状态 | `task status` |
 | **`task start <task>`**| 动态启动指定任务 (如 net / control) | `task start control` |
 | **`task stop <task>`** | 动态停止指定任务 | `task stop control` |
@@ -99,3 +107,18 @@ idf.py -p com6 flash monitor
 | **`nvs_set`** | 写入设置某个 Key 的值 | `nvs_set nvs storage wifi_ssid str -v MyWiFi` |
 | **`tasks`** | 列出系统底层所有 FreeRTOS 线程 CPU/内存占用 | `tasks` |
 | **`restart`** | 重新启动 ESP32-S3 | `restart` |
+
+### 红外协议调用链
+
+```text
+Shell / BLE / 网络控制
+        ↓ ac_request_t
+control_task 独占队列
+        ↓
+protocol_manager 品牌路由与能力检查
+        ↓ ir_frame_t
+ir_remote / ir_driver 发送
+```
+
+上层只描述品牌、动作和通用参数；品牌目录负责构造各自协议帧。当前
+`ac_state` 保存最后一次成功发送的控制状态，后续可扩展为按设备 ID 保存多设备状态。

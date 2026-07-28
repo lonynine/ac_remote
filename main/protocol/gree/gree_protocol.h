@@ -7,16 +7,14 @@
 #ifndef GREE_PROTOCOL_H
 #define GREE_PROTOCOL_H
 
-#include "ir_protocol.h"
+#include "esp_err.h"
+#include "protocol_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-esp_err_t gree_protocol_encode(const ac_remote_cmd_t *cmd, 
-                               rmt_symbol_word_t *symbols, 
-                               size_t symbol_max, 
-                               size_t *out_count);
+esp_err_t gree_protocol_encode(const ac_request_t *request, ir_frame_t *frame);
 
 #ifdef __cplusplus
 }

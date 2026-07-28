@@ -7,8 +7,6 @@
 #include "ir_remote.h"
 #include "ir_driver.h"
 #include "ir_learn.h"
-#include "haier_protocol.h"
-#include "gree_protocol.h"
 #include "esp_log.h"
 
 static const char *TAG = "ir";
@@ -43,66 +41,31 @@ esp_err_t ir_remote_init(void)
     return ESP_OK;
 }
 
-esp_err_t ir_remote_send_cmd(const ac_remote_cmd_t *cmd)
+esp_err_t ir_remote_send_frame(const ir_frame_t *frame)
 {
-    if (!cmd) {
+    if (!frame || frame->symbol_count == 0 ||
+        frame->symbol_count > AC_PROTOCOL_MAX_SYMBOLS || frame->carrier_hz == 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    rmt_symbol_word_t symbols[140];
-    size_t symbol_count = 0;
-    esp_err_t err = ESP_OK;
-
-    switch (cmd->brand) {
-    case AC_BRAND_HAIER:
-        err = haier_protocol_encode(cmd, symbols, 140, &symbol_count);
-        break;
-    case AC_BRAND_GREE:
-        err = gree_protocol_encode(cmd, symbols, 140, &symbol_count);
-        break;
-    default:
-        err = ESP_ERR_NOT_SUPPORTED;
-        break;
-    }
-
+    esp_err_t err = ir_driver_tx_set_carrier(frame->carrier_hz);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "encode failed brand=%d err=%s", cmd->brand, esp_err_to_name(err));
+        ESP_LOGE(TAG, "set carrier failed frequency=%luHz err=%s",
+                 (unsigned long)frame->carrier_hz, esp_err_to_name(err));
         return err;
     }
 
-    err = ir_driver_tx_symbols(symbols, symbol_count);
+    err = ir_driver_tx_symbols(frame->symbols, frame->symbol_count);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "send failed brand=%d symbols=%zu err=%s",
-                 cmd->brand, symbol_count, esp_err_to_name(err));
+        ESP_LOGE(TAG, "send frame failed symbols=%zu err=%s",
+                 frame->symbol_count, esp_err_to_name(err));
         return err;
     }
 
-    ESP_LOGI(TAG, "send brand=%d power=%d mode=%d temp=%u fan=%d symbols=%zu",
-             cmd->brand, cmd->power, cmd->mode, cmd->temp, cmd->fan, symbol_count);
-    log_sent_symbols(symbols, symbol_count);
+    ESP_LOGI(TAG, "send frame carrier=%luHz symbols=%zu",
+             (unsigned long)frame->carrier_hz, frame->symbol_count);
+    log_sent_symbols(frame->symbols, frame->symbol_count);
     return ESP_OK;
-}
-
-esp_err_t ir_remote_send_haier(const haier_ac_status_t *status)
-{
-    if (!status) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    ac_remote_cmd_t cmd = *status;
-    cmd.brand = AC_BRAND_HAIER;
-    return ir_remote_send_cmd(&cmd);
-}
-
-esp_err_t ir_remote_send_gree(const gree_ac_status_t *status)
-{
-    if (!status) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    ac_remote_cmd_t cmd = *status;
-    cmd.brand = AC_BRAND_GREE;
-    return ir_remote_send_cmd(&cmd);
 }
 
 esp_err_t ir_remote_learn_start(uint32_t timeout_sec)
