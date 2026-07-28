@@ -14,11 +14,11 @@
 
 static const char *TAG = "task";
 
-// 表驱动注册表：统一包含 net 任务、control 红外控制任务与 sensor 温湿度采集任务
+// 业务任务注册表。底层能力通过 network 模块提供。
 static const task_item_t s_task_registry[] = {
     {
         .name = "net",
-        .description = "WiFi 网络管理与自动重连监控任务",
+        .description = "WiFi 重连、网络状态与 NTP 同步管理任务",
         .start = net_task_start,
         .stop = net_task_stop,
         .is_running = net_task_is_running,

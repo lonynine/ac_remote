@@ -27,6 +27,7 @@
 #include "cmd_nvs.h"
 #include "cmd_task.h"
 #include "cmd_ac.h"
+#include "cmd_net.h"
 
 static const char* TAG = "shell";
 
@@ -157,6 +158,7 @@ static void register_all_commands(void)
     register_nvs();
     register_cmd_task();
     register_cmd_ac();
+    register_cmd_net();
 }
 
 esp_err_t shell_init(void)
