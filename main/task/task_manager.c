@@ -6,6 +6,7 @@
 
 #include "task_manager.h"
 #include "net_task.h"
+#include "http_task.h"
 #include "control_task.h"
 #include "sensor_task.h"
 #include <stdio.h>
@@ -22,6 +23,13 @@ static const task_item_t s_task_registry[] = {
         .start = net_task_start,
         .stop = net_task_stop,
         .is_running = net_task_is_running,
+    },
+    {
+        .name = "http",
+        .description = "HTTP REST API 服务与 mDNS 服务发布任务",
+        .start = http_task_start,
+        .stop = http_task_stop,
+        .is_running = http_task_is_running,
     },
     {
         .name = "control",
@@ -92,6 +100,11 @@ bool task_manager_is_running(const char *name)
         return item->is_running();
     }
     return false;
+}
+
+bool task_manager_exists(const char *name)
+{
+    return find_task(name) != NULL;
 }
 
 void task_manager_print_status(void)

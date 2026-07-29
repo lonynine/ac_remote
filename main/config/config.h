@@ -18,13 +18,18 @@ extern "C" {
 #define CONFIG_WIFI_SSID_LEN     32
 #define CONFIG_WIFI_PASS_LEN     64
 #define CONFIG_DEVICE_NAME_LEN   32
+#define CONFIG_MDNS_HOSTNAME_LEN 64
 
 typedef struct {
     char wifi_ssid[CONFIG_WIFI_SSID_LEN];
     char wifi_password[CONFIG_WIFI_PASS_LEN];
     char device_name[CONFIG_DEVICE_NAME_LEN];
+    char mdns_hostname[CONFIG_MDNS_HOSTNAME_LEN];
     uint16_t device_id;
 } sys_config_t;
+
+bool sys_config_mdns_hostname_is_valid(const char *hostname);
+bool sys_config_is_valid(const sys_config_t *config);
 
 /**
  * @brief 初始化应用配置模块（内部自动调用 nvs_driver 初始化并载入参数）

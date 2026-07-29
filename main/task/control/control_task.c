@@ -53,6 +53,8 @@ static void control_task_proc(void *pvParameters)
                     state.mode = msg.request.mode;
                     state.temp = msg.request.temp;
                     state.fan = msg.request.fan;
+                    state.swing = msg.request.swing;
+                    state.light = msg.request.light;
                     if (brand_changed) {
                         state.timer_mode = AC_TIMER_NONE;
                         state.on_timer_min = 0;

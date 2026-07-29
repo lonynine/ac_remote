@@ -9,6 +9,7 @@
 
 #include "esp_err.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,7 @@ typedef struct {
     float temperature;  // 温度 (℃)
     float humidity;     // 湿度 (%RH)
     bool valid;         // 数据是否有效
+    int64_t updated_at_us;
 } sensor_data_t;
 
 /**
@@ -50,6 +52,7 @@ bool sensor_task_is_running(void);
  * @return ESP_OK 成功, ESP_ERR_INVALID_STATE 任务未准备好
  */
 esp_err_t sensor_task_get_data(float *temp, float *humi);
+esp_err_t sensor_task_get_status(sensor_data_t *data);
 
 #ifdef __cplusplus
 }

@@ -7,6 +7,7 @@
 #include "sensor_task.h"
 #include "aht20.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -19,8 +20,17 @@ static SemaphoreHandle_t s_sensor_mutex = NULL;
 static sensor_data_t s_latest_data = {
     .temperature = 0.0f,
     .humidity = 0.0f,
-    .valid = false
+    .valid = false,
+    .updated_at_us = 0,
 };
+
+static void sensor_set_valid(bool valid)
+{
+    if (xSemaphoreTake(s_sensor_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        s_latest_data.valid = valid;
+        xSemaphoreGive(s_sensor_mutex);
+    }
+}
 
 static void sensor_wait_ready(void)
 {
@@ -40,6 +50,7 @@ static void sensor_task_proc(void *pvParameters)
 
     float temp = 0.0f;
     float humi = 0.0f;
+    TickType_t last_wake_time = xTaskGetTickCount();
 
     while (1) {
         esp_err_t err = aht20_read_data(&temp, &humi);
@@ -48,16 +59,18 @@ static void sensor_task_proc(void *pvParameters)
                 s_latest_data.temperature = temp;
                 s_latest_data.humidity = humi;
                 s_latest_data.valid = true;
+                s_latest_data.updated_at_us = esp_timer_get_time();
                 xSemaphoreGive(s_sensor_mutex);
             }
             ESP_LOGI(TAG, "env temp=%.1fC humi=%.1f%%", temp, humi);
         } else {
             ESP_LOGW(TAG, "aht20 read failed: %s", esp_err_to_name(err));
+            sensor_set_valid(false);
             sensor_wait_ready();
+            last_wake_time = xTaskGetTickCount();
         }
 
-        // 每 2 秒采集一次
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(1000));
     }
 }
 
@@ -99,6 +112,7 @@ esp_err_t sensor_task_stop(void)
         vTaskDelete(s_sensor_task_handle);
         s_sensor_task_handle = NULL;
         aht20_deinit();
+        sensor_set_valid(false);
         ESP_LOGI(TAG, "温湿度采集任务已停止");
     }
     return ESP_OK;
@@ -111,14 +125,32 @@ bool sensor_task_is_running(void)
 
 esp_err_t sensor_task_get_data(float *temp, float *humi)
 {
-    if (s_sensor_mutex == NULL) return ESP_ERR_INVALID_STATE;
+    sensor_data_t data;
+    esp_err_t err = sensor_task_get_status(&data);
+    if (err != ESP_OK) {
+        return err;
+    }
+    if (temp) *temp = data.temperature;
+    if (humi) *humi = data.humidity;
+    return ESP_OK;
+}
 
-    esp_err_t err = ESP_ERR_INVALID_STATE;
+esp_err_t sensor_task_get_status(sensor_data_t *data)
+{
+    if (!data) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_sensor_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = ESP_ERR_TIMEOUT;
     if (xSemaphoreTake(s_sensor_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         if (s_latest_data.valid) {
-            if (temp) *temp = s_latest_data.temperature;
-            if (humi) *humi = s_latest_data.humidity;
+            *data = s_latest_data;
             err = ESP_OK;
+        } else {
+            err = ESP_ERR_INVALID_STATE;
         }
         xSemaphoreGive(s_sensor_mutex);
     }

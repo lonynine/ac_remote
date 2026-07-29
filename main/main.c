@@ -21,6 +21,7 @@ static const char *TAG = "main";
 static void setup_log_levels(void)
 {
   esp_log_level_set("*", ESP_LOG_WARN);
+  esp_log_level_set("httpd_txrx", ESP_LOG_ERROR);
 
   // esp_log_level_set("main", ESP_LOG_INFO);
   // esp_log_level_set("config", ESP_LOG_INFO);
@@ -71,6 +72,7 @@ void app_main(void) {
   log_step_result("net task start", task_manager_start("net"));
   log_step_result("control task start", task_manager_start("control"));
   log_step_result("sensor task start", task_manager_start("sensor"));
+  log_step_result("http task start", task_manager_start("http"));
 
   // 4. 启动 BLE 蓝牙服务
   log_step_result("ble init", ble_server_init(cfg.device_name));

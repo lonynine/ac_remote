@@ -42,6 +42,7 @@ esp_err_t task_manager_stop(const char *name);
  * @brief 查询指定任务是否在运行
  */
 bool task_manager_is_running(const char *name);
+bool task_manager_exists(const char *name);
 
 /**
  * @brief 打印所有注册后台任务的状态列表

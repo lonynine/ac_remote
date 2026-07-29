@@ -5,12 +5,23 @@
  */
 
 #include "cmd_net.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+
+#include "argtable3/argtable3.h"
+#include "config.h"
 #include "esp_console.h"
 #include "esp_netif.h"
 #include "net_task.h"
+
+static struct {
+    struct arg_str *action;
+    struct arg_str *subaction;
+    struct arg_str *value;
+    struct arg_end *end;
+} net_args;
 
 static const char *net_state_name(net_task_state_t state)
 {
@@ -25,17 +36,7 @@ static const char *net_state_name(net_task_state_t state)
     }
 }
 
-static void print_net_help(void)
-{
-    printf("\n网络调试命令:\n");
-    printf("  net status       查看 WiFi、IP、NTP 和重连状态\n");
-    printf("  net time         查看当前网络校准时间\n");
-    printf("  net sync         请求立即进行一次 NTP 校时\n");
-    printf("  net reconnect    请求 WiFi 立即重新连接\n");
-    printf("  net help         显示本帮助\n\n");
-}
-
-static int print_net_status(void)
+static esp_err_t print_net_status(void)
 {
     net_status_t status;
     esp_err_t err = net_get_status(&status);
@@ -44,41 +45,43 @@ static int print_net_status(void)
         return err;
     }
 
-    printf("网络任务状态: %s\n", net_state_name(status.state));
-    printf("SSID: %s\n", status.ssid[0] ? status.ssid : "(未配置)");
-    printf("WiFi连接: %s\n",
-           status.state_bits & NET_STATE_WIFI_CONNECTED ? "是" : "否");
-    printf("IPv4可用: %s\n",
-           status.state_bits & NET_STATE_IPV4_READY ? "是" : "否");
-    printf("NTP已同步: %s\n",
-           status.state_bits & NET_STATE_TIME_SYNCED ? "是" : "否");
-
+    printf("state: %s\n", net_state_name(status.state));
+    printf("ssid: %s\n", status.ssid[0] ? status.ssid : "(未配置)");
+    printf("wifi.connected: %s\n",
+           status.state_bits & NET_STATE_WIFI_CONNECTED ? "yes" : "no");
+    printf("ipv4.ready: %s\n",
+           status.state_bits & NET_STATE_IPV4_READY ? "yes" : "no");
+    printf("ntp.synced: %s\n",
+           status.state_bits & NET_STATE_TIME_SYNCED ? "yes" : "no");
+    printf("mdns.ready: %s\n",
+           status.state_bits & NET_STATE_MDNS_READY ? "yes" : "no");
+    if (status.mdns_hostname[0]) {
+        printf("mdns.address: %s.local\n", status.mdns_hostname);
+    }
     if (status.state_bits & NET_STATE_IPV4_READY) {
-        printf("IP: " IPSTR "\n", IP2STR(&status.ip_info.ip));
-        printf("网关: " IPSTR "\n", IP2STR(&status.ip_info.gw));
-        printf("掩码: " IPSTR "\n", IP2STR(&status.ip_info.netmask));
+        printf("ipv4.address: " IPSTR "\n", IP2STR(&status.ip_info.ip));
+        printf("ipv4.gateway: " IPSTR "\n", IP2STR(&status.ip_info.gw));
+        printf("ipv4.netmask: " IPSTR "\n", IP2STR(&status.ip_info.netmask));
     }
-    printf("最近断开: reason=%u rssi=%d dBm\n",
-           status.disconnect_reason, status.disconnect_rssi);
-    printf("重连次数: %lu", (unsigned long)status.reconnect_count);
-    if (status.reconnect_delay_ms > 0) {
-        printf("，下次等待 %lu ms", (unsigned long)status.reconnect_delay_ms);
-    }
-    printf("\n");
+    printf("disconnect.reason: %u\n", status.disconnect_reason);
+    printf("disconnect.rssi: %d dBm\n", status.disconnect_rssi);
+    printf("reconnect.count: %lu\n", (unsigned long)status.reconnect_count);
+    printf("reconnect.delay_ms: %lu\n",
+           (unsigned long)status.reconnect_delay_ms);
 
     if (status.state_bits & NET_STATE_TIME_SYNCED) {
         char last_sync[32];
-        struct tm sync_tm;
-        if (localtime_r(&status.last_sync_time, &sync_tm) &&
+        struct tm sync_time;
+        if (localtime_r(&status.last_sync_time, &sync_time) &&
             strftime(last_sync, sizeof(last_sync), "%Y-%m-%d %H:%M:%S %Z",
-                     &sync_tm) > 0) {
-            printf("最后校时: %s\n", last_sync);
+                     &sync_time) > 0) {
+            printf("ntp.last_sync: %s\n", last_sync);
         }
     }
     return ESP_OK;
 }
 
-static int print_net_time(void)
+static esp_err_t print_net_time(void)
 {
     time_t epoch;
     esp_err_t err = net_time_get_epoch(&epoch);
@@ -91,64 +94,148 @@ static int print_net_time(void)
     err = net_time_format(formatted, sizeof(formatted),
                           "%Y-%m-%d %H:%M:%S %Z");
     if (err != ESP_OK) {
-        printf("格式化网络时间失败: %s\n", esp_err_to_name(err));
         return err;
     }
-    printf("本地时间: %s\n", formatted);
-    printf("Unix时间: %lld\n", (long long)epoch);
+    printf("local: %s\n", formatted);
+    printf("epoch: %lld\n", (long long)epoch);
+    return ESP_OK;
+}
+
+static esp_err_t print_net_mdns(void)
+{
+    sys_config_t config;
+    net_status_t status;
+    esp_err_t err = sys_config_get(&config);
+    if (err == ESP_OK) {
+        err = net_get_status(&status);
+    }
+    if (err != ESP_OK) {
+        printf("读取 mDNS 状态失败: %s\n", esp_err_to_name(err));
+        return err;
+    }
+
+    if (config.mdns_hostname[0]) {
+        printf("configured.hostname: %s\n", config.mdns_hostname);
+    } else {
+        printf("configured.hostname: (自动生成: ac-remote-%u)\n",
+               config.device_id);
+    }
+    printf("ready: %s\n",
+           status.state_bits & NET_STATE_MDNS_READY ? "yes" : "no");
+    if (status.mdns_hostname[0]) {
+        printf("active.hostname: %s\n", status.mdns_hostname);
+        printf("address: http://%s.local/\n", status.mdns_hostname);
+    }
+    return ESP_OK;
+}
+
+static esp_err_t configure_net_mdns(const char *subaction,
+                                    const char *value)
+{
+    if (!subaction) {
+        return print_net_mdns();
+    }
+
+    sys_config_t config;
+    esp_err_t err = sys_config_get(&config);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (strcasecmp(subaction, "reset") == 0) {
+        if (value) {
+            printf("net mdns reset 不接受 hostname 参数\n");
+            return ESP_ERR_INVALID_ARG;
+        }
+        config.mdns_hostname[0] = '\0';
+    } else if (strcasecmp(subaction, "set") == 0) {
+        if (!value) {
+            printf("net mdns set 需要 hostname 参数\n");
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (!sys_config_mdns_hostname_is_valid(value)) {
+            printf("hostname 只允许小写字母、数字和中划线，且不能以中划线开头或结尾\n");
+            return ESP_ERR_INVALID_ARG;
+        }
+        strlcpy(config.mdns_hostname, value, sizeof(config.mdns_hostname));
+    } else {
+        printf("未知 mDNS 操作: %s，可用操作: set | reset\n", subaction);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    err = sys_config_save(&config);
+    if (err != ESP_OK) {
+        printf("保存 mDNS 配置失败: %s\n", esp_err_to_name(err));
+        return err;
+    }
+    printf("mDNS 配置已保存，网络任务将在数秒内应用\n");
     return ESP_OK;
 }
 
 static int do_cmd_net(int argc, char **argv)
 {
-    if (argc < 2 || strcasecmp(argv[1], "help") == 0) {
-        print_net_help();
-        return ESP_OK;
+    int errors = arg_parse(argc, argv, (void **)&net_args);
+    if (errors != 0) {
+        arg_print_errors(stderr, net_args.end, argv[0]);
+        return ESP_ERR_INVALID_ARG;
     }
-    if (strcasecmp(argv[1], "status") == 0) {
+
+    const char *action = net_args.action->sval[0];
+    const char *subaction = net_args.subaction->count > 0
+                                ? net_args.subaction->sval[0] : NULL;
+    const char *value = net_args.value->count > 0
+                            ? net_args.value->sval[0] : NULL;
+
+    if (strcasecmp(action, "mdns") == 0) {
+        return configure_net_mdns(subaction, value);
+    }
+    if (subaction || value) {
+        printf("net %s 不接受额外参数\n", action);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strcasecmp(action, "status") == 0) {
         return print_net_status();
     }
-    if (strcasecmp(argv[1], "time") == 0) {
+    if (strcasecmp(action, "time") == 0) {
         return print_net_time();
     }
-    if (strcasecmp(argv[1], "sync") == 0) {
+    if (strcasecmp(action, "sync") == 0) {
         esp_err_t err = net_request_time_sync();
         if (err == ESP_OK) {
-            printf("已请求 NTP 重新校时，请使用 net status 查看结果\n");
-        } else {
-            printf("请求 NTP 校时失败，请确认 IPv4 已可用: %s\n",
-                   esp_err_to_name(err));
+            printf("已请求 NTP 重新同步\n");
         }
         return err;
     }
-    if (strcasecmp(argv[1], "reconnect") == 0) {
+    if (strcasecmp(action, "reconnect") == 0) {
         esp_err_t err = net_request_reconnect();
         if (err == ESP_OK) {
-            printf("已请求 WiFi 重新连接\n");
-        } else {
-            printf("请求 WiFi 重连失败: %s\n", esp_err_to_name(err));
+            printf("已请求 Wi-Fi 重新连接\n");
         }
         return err;
     }
 
-    printf("未知 net 子命令: %s\n", argv[1]);
-    print_net_help();
+    printf("未知操作: %s，可用操作: status | time | mdns | sync | reconnect\n",
+           action);
     return ESP_ERR_INVALID_ARG;
 }
 
 esp_err_t register_cmd_net(void)
 {
+    net_args.action = arg_str1(
+        NULL, NULL, "<status|time|mdns|sync|reconnect>",
+        "操作: 网络状态、当前时间、mDNS 配置、立即校时或重新连接");
+    net_args.subaction = arg_str0(
+        NULL, NULL, "<set|reset>", "mdns 的可选操作");
+    net_args.value = arg_str0(
+        NULL, NULL, "<hostname>", "mdns set 使用的主机名");
+    net_args.end = arg_end(3);
+
     const esp_console_cmd_t command = {
         .command = "net",
-        .help = "网络状态与时间调试命令\n"
-                "  net status\n"
-                "  net time\n"
-                "  net sync\n"
-                "  net reconnect\n"
-                "  net help",
+        .help = "网络状态、时间同步、Wi-Fi 重连和 mDNS 调试",
         .hint = NULL,
-        .func = do_cmd_net,
-        .argtable = NULL,
+        .func = &do_cmd_net,
+        .argtable = &net_args,
     };
     return esp_console_cmd_register(&command);
 }

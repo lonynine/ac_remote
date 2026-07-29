@@ -27,6 +27,7 @@
 #include "cmd_nvs.h"
 #include "cmd_task.h"
 #include "cmd_ac.h"
+#include "cmd_config.h"
 #include "cmd_net.h"
 
 static const char* TAG = "shell";
@@ -145,7 +146,7 @@ static void initialize_console_library(const char *history_path)
     }
 }
 
-static void register_all_commands(void)
+static esp_err_t register_all_commands(void)
 {
     esp_console_register_help_command();
     register_system_common();
@@ -156,9 +157,11 @@ static void register_all_commands(void)
     register_system_deep_sleep();
 #endif
     register_nvs();
-    register_cmd_task();
-    register_cmd_ac();
-    register_cmd_net();
+    esp_err_t err = register_cmd_task();
+    if (err == ESP_OK) err = register_cmd_ac();
+    if (err == ESP_OK) err = register_cmd_config();
+    if (err == ESP_OK) err = register_cmd_net();
+    return err;
 }
 
 esp_err_t shell_init(void)
@@ -173,9 +176,7 @@ esp_err_t shell_init(void)
     initialize_console_peripheral();
     initialize_console_library(HISTORY_PATH);
     setup_prompt(SHELL_PROMPT_DEFAULT);
-    register_all_commands();
-
-    return ESP_OK;
+    return register_all_commands();
 }
 
 void shell_start(void)

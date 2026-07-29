@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>空调遥控器</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef4f8;
+      --card: #fff;
+      --ink: #15252f;
+      --muted: #6a7e89;
+      --line: #dce7ed;
+      --blue: #1687d9;
+      --blue-dark: #0a66ad;
+      --red: #e75353;
+      --shadow: 0 18px 45px rgba(29, 65, 84, .13);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: radial-gradient(circle at 15% 0, #d9f2ff 0, transparent 32%), var(--bg);
+      font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    button, select, input { font: inherit; }
+    button { touch-action: manipulation; }
+    .wrap { width: min(760px, 100%); margin: auto; padding: 24px 16px 40px; }
+    .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .title { font-size: 22px; font-weight: 750; }
+    .online { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #aebbc2; }
+    .dot.ok { background: #30b878; box-shadow: 0 0 0 4px #30b87820; }
+    .card { overflow: hidden; background: var(--card); border: 1px solid #ffffff80; border-radius: 24px; box-shadow: var(--shadow); }
+    .display { position: relative; padding: 28px; text-align: center; color: #fff; background: linear-gradient(145deg, #0b6faf, #159bdf); }
+    .power-pill { position: absolute; top: 18px; right: 20px; padding: 6px 11px; border-radius: 99px; background: #ffffff22; font-size: 12px; }
+    .temp { margin: 14px 0 8px; font-size: 76px; font-weight: 300; line-height: 1; letter-spacing: -4px; }
+    .temp small { font-size: 25px; vertical-align: top; letter-spacing: 0; }
+    .summary { font-size: 15px; opacity: .9; }
+    .timer-state { min-height: 18px; margin-top: 8px; font-size: 12px; opacity: .76; }
+    .environment { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 22px; background: #f7fbfd; border-bottom: 1px solid var(--line); }
+    .environment-item { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 58px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .environment-icon { font-size: 23px; }
+    .environment-label { color: var(--muted); font-size: 12px; }
+    .environment-value { margin-top: 2px; font-size: 20px; font-weight: 700; }
+    .body { padding: 22px; }
+    .section { margin-bottom: 22px; }
+    .label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: 650; }
+    .brand { padding: 7px 10px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .choice, .timer-btn { padding: 11px 6px; color: var(--muted); background: #f8fbfc; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: .15s; }
+    .choice:hover, .timer-btn:hover { border-color: #a7ccdf; }
+    .choice.active { color: var(--blue-dark); font-weight: 650; background: #e8f5fd; border-color: #58aee0; }
+    .temp-control { display: grid; grid-template-columns: 55px 1fr 55px; gap: 12px; align-items: center; }
+    .round { height: 50px; color: var(--blue-dark); background: #f7fafb; border: 1px solid var(--line); border-radius: 15px; font-size: 26px; cursor: pointer; }
+    .range { width: 100%; accent-color: var(--blue); }
+    .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .toggle { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; }
+    .switch { width: 44px; height: 24px; padding: 3px; background: #c8d4da; border: 0; border-radius: 20px; cursor: pointer; }
+    .switch::after { display: block; width: 18px; height: 18px; background: #fff; border-radius: 50%; content: ""; transition: .18s; }
+    .switch.on { background: var(--blue); }
+    .switch.on::after { transform: translateX(20px); }
+    .timer-box { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .timer-box input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+    .timer-cancel { width: 100%; margin-top: 8px; padding: 10px; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 24px; }
+    .primary, .power-off { padding: 14px; color: #fff; font-weight: 700; border: 0; border-radius: 14px; cursor: pointer; }
+    .primary { background: linear-gradient(135deg, var(--blue), var(--blue-dark)); }
+    .power-off { background: var(--red); }
+    button:disabled { opacity: .55; cursor: wait; }
+    .notice { position: fixed; bottom: 24px; left: 50%; max-width: 90%; padding: 11px 18px; color: #fff; background: #172a34; border-radius: 12px; opacity: 0; pointer-events: none; transform: translate(-50%, 20px); transition: .2s; font-size: 14px; }
+    .notice.show { opacity: 1; transform: translate(-50%, 0); }
+    .notice.bad { background: #b63e3e; }
+    .foot { margin-top: 16px; color: var(--muted); text-align: center; font-size: 12px; }
+    .refresh { padding: 4px; color: var(--blue-dark); background: transparent; border: 0; cursor: pointer; }
+
+    @media (max-width: 520px) {
+      .wrap { padding: 14px 10px 28px; }
+      .body { padding: 17px; }
+      .display { padding: 24px 16px; }
+      .temp { font-size: 66px; }
+      .grid { grid-template-columns: repeat(3, 1fr); }
+      .timer-box { grid-template-columns: 1fr 1fr; }
+      .timer-box input { grid-column: 1 / -1; }
+      .actions { grid-template-columns: 1fr; }
+      .head { padding: 0 5px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <div class="title">空调遥控器</div>
+      <div class="online">
+        <span id="dot" class="dot"></span>
+        <span id="connection">正在连接</span>
+        <button class="refresh" type="button" onclick="loadState(true)">刷新</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="display">
+        <div id="powerPill" class="power-pill">已关机</div>
+        <div class="temp"><span id="displayTemp">--</span><small>℃</small></div>
+        <div id="summary" class="summary">读取空调状态...</div>
+        <div id="timerState" class="timer-state"></div>
+      </div>
+
+      <div class="environment">
+        <div class="environment-item">
+          <span class="environment-icon">🌡️</span>
+          <div><div class="environment-label">室内温度</div><div id="roomTemp" class="environment-value">--.- ℃</div></div>
+        </div>
+        <div class="environment-item">
+          <span class="environment-icon">💧</span>
+          <div><div class="environment-label">室内湿度</div><div id="roomHumidity" class="environment-value">--.- %</div></div>
+        </div>
+      </div>
+
+      <div class="body">
+        <div class="section">
+          <div class="label">
+            <span>空调品牌</span>
+            <select id="brand" class="brand">
+              <option value="haier">海尔</option>
+              <option value="gree">格力</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="label">运行模式</div>
+          <div id="modes" class="grid">
+            <button class="choice" data-value="auto">自动</button>
+            <button class="choice" data-value="cool">制冷</button>
+            <button class="choice" data-value="dry">除湿</button>
+            <button class="choice" data-value="fan">送风</button>
+            <button class="choice" data-value="heat">制热</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="label"><span>设定温度</span><b><span id="setTemp">25</span>℃</b></div>
+          <div class="temp-control">
+            <button class="round" type="button" onclick="changeTemp(-1)">−</button>
+            <input id="temperature" class="range" type="range" min="16" max="30" value="25">
+            <button class="round" type="button" onclick="changeTemp(1)">+</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="label">风速</div>
+          <div id="fans" class="grid">
+            <button class="choice" data-value="auto">自动</button>
+            <button class="choice" data-value="low">低风</button>
+            <button class="choice" data-value="med">中风</button>
+            <button class="choice" data-value="high">高风</button>
+          </div>
+        </div>
+
+        <div class="section toggles">
+          <div class="toggle"><span>上下摆风</span><button id="swing" class="switch" aria-label="摆风"></button></div>
+          <div class="toggle"><span>显示灯光</span><button id="light" class="switch" aria-label="灯光"></button></div>
+        </div>
+
+        <div class="section">
+          <div class="label">协议定时（分钟）</div>
+          <div class="timer-box">
+            <input id="minutes" type="number" min="1" max="1439" value="60">
+            <button class="timer-btn" type="button" onclick="sendTimer('timer_on')">定时开机</button>
+            <button class="timer-btn" type="button" onclick="sendTimer('timer_off')">定时关机</button>
+          </div>
+          <button class="timer-btn timer-cancel" type="button" onclick="sendTimer('timer_cancel')">取消定时</button>
+        </div>
+
+        <div class="actions">
+          <button id="send" class="primary" type="button" onclick="sendState(true)">开机并应用设置</button>
+          <button id="off" class="power-off" type="button" onclick="sendState(false)">关闭空调</button>
+        </div>
+      </div>
+    </section>
+    <div class="foot">页面显示的是 ESP32 最后一次成功发送的缓存状态</div>
+  </main>
+  <div id="notice" class="notice"></div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const labels = { auto: "自动", cool: "制冷", dry: "除湿", fan: "送风", heat: "制热", low: "低风", med: "中风", high: "高风" };
+    let mode = "cool";
+    let fan = "low";
+    let swing = false;
+    let light = false;
+    let busy = false;
+
+    function select(group, value) {
+      document.querySelectorAll(`#${group} .choice`).forEach(button => {
+        button.classList.toggle("active", button.dataset.value === value);
+      });
+    }
+
+    function bind(group, setter) {
+      document.querySelectorAll(`#${group} .choice`).forEach(button => {
+        button.onclick = () => {
+          setter(button.dataset.value);
+          select(group, button.dataset.value);
+        };
+      });
+    }
+
+    function changeTemp(delta) {
+      const input = $("temperature");
+      input.value = Math.max(16, Math.min(30, Number(input.value) + delta));
+      $("setTemp").textContent = input.value;
+    }
+
+    function bindSwitch(id, getValue, setValue) {
+      $(id).onclick = () => {
+        setValue(!getValue());
+        $(id).classList.toggle("on", getValue());
+      };
+    }
+
+    function toast(message, bad = false) {
+      const notice = $("notice");
+      notice.textContent = message;
+      notice.className = `notice show${bad ? " bad" : ""}`;
+      clearTimeout(notice.timer);
+      notice.timer = setTimeout(() => notice.className = "notice", 2600);
+    }
+
+    function setBusy(value) {
+      busy = value;
+      $("send").disabled = value;
+      $("off").disabled = value;
+    }
+
+    function render(state) {
+      $("displayTemp").textContent = state.temperature;
+      $("powerPill").textContent = state.power ? "运行中" : "已关机";
+      $("summary").textContent = `${labels[state.mode] || state.mode} · ${labels[state.fan] || state.fan}`;
+      $("brand").value = state.brand;
+      mode = state.mode;
+      fan = state.fan;
+      swing = Boolean(state.swing);
+      light = Boolean(state.light);
+      $("temperature").value = state.temperature;
+      $("setTemp").textContent = state.temperature;
+      select("modes", mode);
+      select("fans", fan);
+      $("swing").classList.toggle("on", swing);
+      $("light").classList.toggle("on", light);
+
+      const timer = state.timer || {};
+      $("timerState").textContent = timer.mode && timer.mode !== "none"
+        ? `定时：${timer.mode} · 开机 ${timer.on_minutes} 分钟 · 关机 ${timer.off_minutes} 分钟`
+        : "未设置协议定时";
+    }
+
+    async function loadState(showMessage = false) {
+      try {
+        const response = await fetch("/api/v1/ac/state", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "读取失败");
+        render(result.data);
+        $("dot").classList.add("ok");
+        $("connection").textContent = "设备在线";
+        if (showMessage) toast("状态已刷新");
+      } catch (error) {
+        $("dot").classList.remove("ok");
+        $("connection").textContent = "连接失败";
+        if (showMessage) toast(error.message, true);
+      }
+    }
+
+    async function loadSensor() {
+      try {
+        const response = await fetch("/api/v1/sensors", { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok || !result.data || !result.data.valid) {
+          throw new Error("sensor unavailable");
+        }
+        $("roomTemp").textContent = `${Number(result.data.temperature).toFixed(1)} ℃`;
+        $("roomHumidity").textContent = `${Number(result.data.humidity).toFixed(1)} %`;
+      } catch (error) {
+        $("roomTemp").textContent = "--.- ℃";
+        $("roomHumidity").textContent = "--.- %";
+      }
+    }
+
+    async function post(action, params) {
+      if (busy) return;
+      setBusy(true);
+      try {
+        const response = await fetch("/api/v1/ac/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: "ac", action, params })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "请求失败");
+        toast("指令已进入发送队列");
+        setTimeout(() => loadState(false), 700);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function sendState(power) {
+      post("set_state", {
+        brand: $("brand").value,
+        power,
+        mode,
+        temperature: Number($("temperature").value),
+        fan,
+        swing,
+        light
+      });
+    }
+
+    function sendTimer(action) {
+      const params = { brand: $("brand").value };
+      if (action !== "timer_cancel") {
+        const minutes = Number($("minutes").value);
+        if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1439) {
+          toast("定时范围为 1 到 1439 分钟", true);
+          return;
+        }
+        params.minutes = minutes;
+      }
+      post(action, params);
+    }
+
+    bind("modes", value => mode = value);
+    bind("fans", value => fan = value);
+    bindSwitch("swing", () => swing, value => swing = value);
+    bindSwitch("light", () => light, value => light = value);
+    $("temperature").oninput = event => $("setTemp").textContent = event.target.value;
+    select("modes", mode);
+    select("fans", fan);
+    loadState(false);
+    loadSensor();
+    setInterval(() => { if (!busy) loadState(false); }, 5000);
+    setInterval(loadSensor, 1000);
+  </script>
+</body>
+</html>

@@ -1,7 +1,11 @@
 idf_component_register(SRCS "main.c"
                             "shell/shell.c"
                             "shell/cmd_ac.c"
+                            "shell/cmd_config.c"
                             "shell/cmd_net.c"
+                            "api/api_response.c"
+                            "api/api_routes.c"
+                            "web/web_ui.c"
                             "driver/nvs/nvs_driver.c"
                             "driver/ir/ir_driver.c"
                             "driver/i2c/i2c_driver.c"
@@ -14,18 +18,26 @@ idf_component_register(SRCS "main.c"
                             "protocol/gree/gree_protocol.c"
                             "config/config.c"
                             "ac/ac_state.c"
-                            "network/wifi_sta.c"
-                            "network/ntp_client.c"
+                            "network/sta/wifi_sta.c"
+                            "network/ntp/ntp_client.c"
+                            "network/mdns/mdns_responder.c"
+                            "network/http/http_server.c"
                             "ble/ble_server.c"
                             "task/task_manager.c"
                             "task/net/net_task.c"
+                            "task/http/http_task.c"
                             "task/control/control_task.c"
                             "task/sensor/sensor_task.c"
                        REQUIRES esp_driver_gpio esp_driver_rmt esp_driver_i2c
                        PRIV_REQUIRES console esp_driver_uart fatfs esp_driver_usb_serial_jtag
                                      esp_usb_cdc_rom_console nvs_flash cmd_system cmd_nvs
-                                     esp_wifi esp_event esp_netif bt cmd_task
+                                     esp_wifi esp_event esp_netif esp_http_server
+                                     mdns espressif__cjson bt cmd_task
                        INCLUDE_DIRS "." "shell" "driver/nvs" "driver/ir" "driver/i2c"
                                     "hardware/aht20" "hardware/ir_remote" "protocol"
                                     "protocol/haier" "protocol/gree"
-                                    "config" "ac" "network" "ble" "task" "task/net" "task/control" "task/sensor")
+                                    "config" "ac" "network" "network/http"
+                                    "network/mdns" "api" "web"
+                                    "ble" "task" "task/net" "task/http"
+                                    "task/control" "task/sensor"
+                       EMBED_FILES "web/control.html" "web/favicon.svg")

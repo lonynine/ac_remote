@@ -5,6 +5,7 @@
  */
 
 #include "net_task.h"
+#include <stdio.h>
 #include <string.h>
 #include "config.h"
 #include "esp_log.h"
@@ -12,8 +13,9 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
-#include "ntp_client.h"
-#include "wifi_sta.h"
+#include "mdns/mdns_responder.h"
+#include "ntp/ntp_client.h"
+#include "sta/wifi_sta.h"
 
 #define NET_EVENT_QUEUE_LENGTH       12
 #define NET_CONFIG_CHECK_MS          3000U
@@ -42,6 +44,7 @@ static EventGroupHandle_t s_state_events;
 static portMUX_TYPE s_status_lock = portMUX_INITIALIZER_UNLOCKED;
 static net_status_t s_status;
 static bool s_ntp_initialized;
+static bool s_mdns_initialized;
 static bool s_wifi_initialized;
 static sys_config_t s_active_config;
 static bool s_has_active_config;
@@ -103,6 +106,42 @@ static esp_err_t net_ntp_init(void)
     return err;
 }
 
+static esp_err_t net_mdns_init(void)
+{
+    if (s_mdns_initialized) {
+        return ESP_OK;
+    }
+    if (!s_has_active_config) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    char hostname[sizeof(s_status.mdns_hostname)];
+    char instance_name[64];
+    if (s_active_config.mdns_hostname[0] != '\0') {
+        strlcpy(hostname, s_active_config.mdns_hostname, sizeof(hostname));
+    } else {
+        snprintf(hostname, sizeof(hostname), "ac-remote-%u",
+                 s_active_config.device_id);
+    }
+    strlcpy(instance_name,
+            s_active_config.device_name[0] != '\0'
+                ? s_active_config.device_name : "AC Remote",
+            sizeof(instance_name));
+
+    esp_err_t err = network_mdns_init(hostname, instance_name);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    taskENTER_CRITICAL(&s_status_lock);
+    strlcpy(s_status.mdns_hostname, hostname,
+            sizeof(s_status.mdns_hostname));
+    taskEXIT_CRITICAL(&s_status_lock);
+    s_mdns_initialized = true;
+    net_status_set_bits(NET_STATE_MDNS_READY);
+    return ESP_OK;
+}
+
 static uint32_t net_next_reconnect_delay(uint32_t reconnect_count)
 {
     uint32_t shift = reconnect_count > 5 ? 5 : reconnect_count;
@@ -144,6 +183,19 @@ static bool net_credentials_changed(const sys_config_t *config)
            strcmp(s_active_config.wifi_password, config->wifi_password) != 0;
 }
 
+static bool net_mdns_identity_changed(const sys_config_t *config)
+{
+    if (!s_has_active_config) {
+        return false;
+    }
+    if (strcmp(s_active_config.mdns_hostname, config->mdns_hostname) != 0 ||
+        strcmp(s_active_config.device_name, config->device_name) != 0) {
+        return true;
+    }
+    return config->mdns_hostname[0] == '\0' &&
+           s_active_config.device_id != config->device_id;
+}
+
 static esp_err_t net_apply_config(const sys_config_t *config, uint32_t *delay_ms)
 {
     if (config->wifi_ssid[0] == '\0') {
@@ -153,14 +205,19 @@ static esp_err_t net_apply_config(const sys_config_t *config, uint32_t *delay_ms
             net_status_clear_bits(NET_STATE_WIFI_CONNECTED |
                                   NET_STATE_IPV4_READY);
         }
+        network_mdns_deinit();
+        s_mdns_initialized = false;
+        net_status_clear_bits(NET_STATE_MDNS_READY);
         s_has_active_config = false;
         taskENTER_CRITICAL(&s_status_lock);
         s_status.ssid[0] = '\0';
+        s_status.mdns_hostname[0] = '\0';
         taskEXIT_CRITICAL(&s_status_lock);
         net_status_set_state(NET_TASK_STATE_WAITING_CONFIG);
         return ESP_ERR_NOT_FOUND;
     }
 
+    bool mdns_identity_changed = net_mdns_identity_changed(config);
     esp_err_t err;
     bool newly_initialized = false;
     if (!s_wifi_initialized) {
@@ -198,6 +255,14 @@ static esp_err_t net_apply_config(const sys_config_t *config, uint32_t *delay_ms
     taskEXIT_CRITICAL(&s_status_lock);
     s_active_config = *config;
     s_has_active_config = true;
+    if (mdns_identity_changed) {
+        network_mdns_deinit();
+        s_mdns_initialized = false;
+        net_status_clear_bits(NET_STATE_MDNS_READY);
+        taskENTER_CRITICAL(&s_status_lock);
+        s_status.mdns_hostname[0] = '\0';
+        taskEXIT_CRITICAL(&s_status_lock);
+    }
     *delay_ms = 0;
     if (!newly_initialized && !s_reconnect_immediately) {
         net_connect_now(delay_ms);
@@ -255,6 +320,13 @@ static void net_handle_wifi_event(const wifi_sta_event_t *event,
             esp_err_t err = ntp_client_start();
             if (err != ESP_OK) {
                 ESP_LOGW(TAG, "NTP start failed: %s", esp_err_to_name(err));
+            }
+        }
+        if (!s_mdns_initialized) {
+            esp_err_t err = net_mdns_init();
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "mDNS initialization failed: %s",
+                         esp_err_to_name(err));
             }
         }
         break;
@@ -335,11 +407,30 @@ static void net_task_entry(void *parameter)
         if (now - last_config_check >= pdMS_TO_TICKS(NET_CONFIG_CHECK_MS)) {
             last_config_check = now;
             sys_config_t latest;
-            if (sys_config_get(&latest) == ESP_OK && net_credentials_changed(&latest)) {
-                esp_err_t err = net_apply_config(&latest, &reconnect_delay_ms);
-                if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
-                    ESP_LOGW(TAG, "apply network config failed: %s",
-                             esp_err_to_name(err));
+            if (sys_config_get(&latest) == ESP_OK) {
+                if (net_credentials_changed(&latest)) {
+                    esp_err_t err = net_apply_config(&latest,
+                                                     &reconnect_delay_ms);
+                    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
+                        ESP_LOGW(TAG, "apply network config failed: %s",
+                                 esp_err_to_name(err));
+                    }
+                } else if (net_mdns_identity_changed(&latest)) {
+                    s_active_config = latest;
+                    network_mdns_deinit();
+                    s_mdns_initialized = false;
+                    net_status_clear_bits(NET_STATE_MDNS_READY);
+                    taskENTER_CRITICAL(&s_status_lock);
+                    s_status.mdns_hostname[0] = '\0';
+                    taskEXIT_CRITICAL(&s_status_lock);
+                    if (xEventGroupGetBits(s_state_events) &
+                        NET_STATE_IPV4_READY) {
+                        esp_err_t err = net_mdns_init();
+                        if (err != ESP_OK) {
+                            ESP_LOGW(TAG, "refresh mDNS identity failed: %s",
+                                     esp_err_to_name(err));
+                        }
+                    }
                 }
             }
         }
@@ -381,6 +472,8 @@ esp_err_t net_task_stop(void)
     vTaskDelete(task);
     ntp_client_deinit();
     s_ntp_initialized = false;
+    network_mdns_deinit();
+    s_mdns_initialized = false;
     network_wifi_sta_stop();
     s_wifi_initialized = false;
     s_has_active_config = false;
